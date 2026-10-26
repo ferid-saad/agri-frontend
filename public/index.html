@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgriIrrigation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>AgriIrrigation</h1>
+    <button id="logout" hidden>Se déconnecter</button>
+  </header>
+
+  <main>
+    <p id="message" role="status"></p>
+
+    <section id="auth-section">
+      <h2>Connexion</h2>
+      <form id="login-form">
+        <label>Email <input type="email" id="email" required></label>
+        <label>Mot de passe <input type="password" id="password" required minlength="6"></label>
+        <div class="actions">
+          <button type="submit">Se connecter</button>
+          <button type="button" id="register-btn" class="secondary">Créer un compte</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="app-section" hidden>
+      <h2>Ajouter une parcelle</h2>
+      <form id="parcelle-form">
+        <label>Nom <input type="text" id="p-nom" required></label>
+        <label>Surface (hectares) <input type="number" id="p-surface" step="0.01" min="0.01" required></label>
+        <label>Culture <input type="text" id="p-culture" required></label>
+        <button type="submit">Ajouter la parcelle</button>
+      </form>
+
+      <h2>Planifier un arrosage</h2>
+      <form id="arrosage-form">
+        <label>Numéro de la parcelle <input type="number" id="a-parcelle" min="1" required></label>
+        <label>Date <input type="date" id="a-date" required></label>
+        <label>Durée (minutes) <input type="number" id="a-duree" min="1" required></label>
+        <label>Volume (litres) <input type="number" id="a-volume" step="0.01" min="0.01" required></label>
+        <button type="submit">Planifier l'arrosage</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
