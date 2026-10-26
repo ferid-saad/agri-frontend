@@ -1,178 +1,125 @@
-# Accès SSH à la VM Ubuntu depuis la machine physique
+# agri-frontend
 
-## 1. Environnement
+Interface web du projet **AgriIrrigation**, une application de suivi de l'irrigation agricole à architecture microservices.
 
-| Élément | Valeur |
-|---|---|
-| Machine physique | Windows *(à compléter : version, ex. Windows 11)* |
-| Hyperviseur | Oracle VirtualBox |
-| VM | Ubuntu 26.04 LTS (noyau 7.0.0-34-generic) |
-| Utilisateur de la VM | `ferid` |
-| Nom d'hôte | `Ubuntu-26` |
-| Adresse IP de la VM | `192.168.100.88` (adaptateur 1, accès par pont) |
+Projet semestriel du Master DevOps \& Cloud, ISET Tozeur, année universitaire 2026 / 2027.
 
-## 2. Configuration côté VM
+## Rôle dans l'architecture
 
-Installation du serveur SSH :
+|Composant|Rôle|Dépôt|
+|-|-|-|
+|**agri-frontend** (ce dépôt)|Interface web et point d'entrée (Nginx)|`agri-frontend`|
+|auth-service|Inscription, connexion, jetons JWT|`agri-auth-service`|
+|irrigation-service|Parcelles, planning d'arrosage|`agri-irrigation-service`|
+|reporting-service|Statistiques et historique|`agri-reporting-service`|
+
+Les manifests Kubernetes de l'ensemble sont dans le dépôt `agri-gitops`.
+
+L'interface est une page HTML, CSS et JavaScript pur, sans framework. Elle est servie par **Nginx**, qui joue aussi le rôle de reverse proxy : le navigateur ne connaît qu'une seule adresse, et Nginx redirige les appels vers les bons services. Cela évite le problème du CORS sans modifier les services. Dans Kubernetes, l'objet Ingress reprendra ce rôle de routage.
+
+|Adresse appelée par le navigateur|Destination|
+|-|-|
+|`/`|Page web (fichiers statiques)|
+|`/api/auth/...`|auth-service (port 3000)|
+|`/api/irrigation/...`|irrigation-service (port 3001)|
+
+## Fonctionnalités
+
+* Inscription et connexion (le jeton JWT est conservé dans `sessionStorage`)
+* Ajout d'une parcelle (nom, surface en hectares, culture)
+* Planification d'un arrosage (numéro de parcelle, date, durée, volume)
+* Messages de succès et d'erreur ; déconnexion automatique si le jeton a expiré (réponse `401`)
+
+La consultation des parcelles et des arrosages viendra avec la story SCRUM-13 d'irrigation-service.
+
+## Prérequis
+
+* Git
+* Docker (Docker Desktop doit être démarré)
+* auth-service et irrigation-service en fonctionnement sur les ports 3000 et 3001, avec PostgreSQL
+
+## Installation
 
 ```bash
-sudo apt update
-sudo apt install openssh-server
+git clone https://github.com/ferid-saad/agri-frontend.git
+cd agri-frontend
 ```
 
-Vérification que le service tourne :
+## Lancer l'interface
 
-```bash
-systemctl status ssh
-```
+Démarrer d'abord les deux services (`npm start` dans `agri-auth-service` et dans `agri-irrigation-service`), puis lancer Nginx dans le dossier `agri-frontend`.
 
-Le service doit afficher `active (running)`.
-
-Relevé de l'adresse IP :
-
-```bash
-ip a
-```
-
-Les clés du serveur (host keys) sont générées automatiquement à l'installation
-dans `/etc/ssh/` (fichiers `ssh_host_*_key` et `ssh_host_*_key.pub`).
-
-## 3. Réseau VirtualBox
-
-Dans *Configuration → Réseau* de la VM, l'adaptateur 1 est en
-**accès par pont** afin que la VM soit joignable depuis Windows.
-L'adresse `10.0.3.15` (NAT) n'est pas joignable directement depuis la machine physique.
-
-## 4. Test de connexion depuis la machine physique
-
-Commande exécutée dans PowerShell sous Windows :
+Sous PowerShell :
 
 ```powershell
-ssh ferid@192.168.100.88
+docker run -d --name agri-frontend -p 8080:80 -v "${PWD}\\\\\\\\public:/usr/share/nginx/html:ro" -v "${PWD}\\\\\\\\nginx.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine
 ```
 
-À la première connexion, l'empreinte du serveur est affichée et acceptée (`yes`).
-Elle est enregistrée dans `C:\Users\<nom>\.ssh\known_hosts`.
-Le mot de passe de `ferid` est ensuite demandé.
-
-Commandes de vérification une fois connecté :
+Sous Linux ou macOS :
 
 ```bash
-hostname
-whoami
-ip a
+docker run -d --name agri-frontend -p 8080:80 \\\\\\\\
+  -v "$PWD/public:/usr/share/nginx/html:ro" \\\\\\\\
+  -v "$PWD/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \\\\\\\\
+  nginx:alpine
 ```
 
-### Capture d'écran
+Ouvrir ensuite **http://localhost:8080**.
 
-![Connexion SSH réussie depuis Windows](images/ssh_test.png)
-
-*La capture montre PowerShell sous Windows, la commande `ssh`, puis le prompt
-`ferid@Ubuntu-26:~$` qui confirme la connexion à la VM.*
-
-## 5. Authentification par clé (optionnel)
-
-Génération de la paire de clés sous Windows :
-
-```powershell
-ssh-keygen -t ed25519
-```
-
-Copie de la clé publique vers la VM :
-
-```powershell
-scp $env:USERPROFILE\.ssh\id_ed25519.pub ferid@192.168.100.88:/tmp/key.pub
-```
-
-Ajout de la clé dans la VM :
+Arrêter et supprimer le conteneur :
 
 ```bash
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-cat /tmp/key.pub >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-rm /tmp/key.pub
+docker rm -f agri-frontend
 ```
 
-### Emplacement des clés
+> `host.docker.internal` (utilisé dans `nginx.conf`) désigne la machine hôte depuis le conteneur. Il fonctionne avec Docker Desktop. Un Dockerfile dédié et la configuration Kubernetes seront ajoutés aux étapes suivantes du projet.
 
-| Clé | Machine | Emplacement | Rôle |
-|---|---|---|---|
-| Clé privée utilisateur | Windows | `C:\Users\<nom>\.ssh\id_ed25519` | Signe le défi (reste secrète) |
-| Clé publique utilisateur | VM | `/home/ferid/.ssh/authorized_keys` | Vérifie l'identité de l'utilisateur |
-| Clé privée du serveur | VM | `/etc/ssh/ssh_host_ed25519_key` | Prouve l'identité de la VM |
-| Clé publique du serveur | Windows (empreinte) | `C:\Users\<nom>\.ssh\known_hosts` | Vérifie que l'on parle à la bonne VM |
+## Scénario d'utilisation
 
-## 6. Problèmes rencontrés
+1. Saisir un email et un mot de passe de 6 caractères minimum, puis cliquer sur **Créer un compte**.
+2. Cliquer sur **Se connecter**.
+3. Ajouter une parcelle : l'interface affiche son numéro.
+4. Planifier un arrosage en indiquant ce numéro.
 
-- *(à compléter selon votre expérience, par exemple : timeout de connexion résolu
-  en passant l'adaptateur réseau en accès par pont)*
-- Installation des Additions invité VirtualBox : le module `vboxvideo` ne compile pas
-  avec le noyau 7.0 (erreur `DRM_ERROR`), sans impact sur SSH.
+## Sécurité
 
-## 7. Installation de Docker sur la VM
+* Les messages sont affichés avec `textContent` et non `innerHTML`, ce qui évite l'injection de code dans la page (XSS)
+* Le jeton JWT est conservé dans `sessionStorage` : il disparaît à la fermeture de l'onglet (un cookie `HttpOnly` serait plus sûr en production)
+* Les contrôles de sécurité restent côté serveur : l'interface ne remplace pas la vérification du jeton dans chaque service
 
-Méthode officielle : dépôt APT de Docker (Ubuntu 26.04 « resolute » est supporté).
-Les commandes sont exécutées dans la VM (directement ou via SSH).
+## Structure du projet
 
-### 7.1 Supprimer les paquets susceptibles d'entrer en conflit
-
-```bash
-for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; do
-  sudo apt remove -y $pkg
-done
+```
+agri-frontend/
+├── public/
+│   ├── index.html     # Page : connexion, parcelles, arrosages
+│   ├── style.css      # Mise en forme
+│   └── app.js         # Appels aux API, gestion du jeton
+├── nginx.conf         # Fichiers statiques et reverse proxy
+└── README.md
 ```
 
-### 7.2 Ajouter le dépôt officiel Docker
+## Workflow Git
 
-```bash
-sudo apt update
-sudo apt install -y ca-certificates curl
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
+|Branche|Usage|
+|-|-|
+|`main`|Code stable|
+|`develop`|Intégration|
+|`feature/SCRUM-<n>-<description>`|Une branche par ticket Jira|
 
-sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
+Chaque fonctionnalité est intégrée dans `develop` par une pull request relue. Les messages de commit commencent par la clé du ticket Jira, par exemple `SCRUM-23: interface web (connexion, parcelles, arrosages)`.
 
-sudo apt update
-```
+## Avancement
 
-### 7.3 Installer Docker Engine
+|Fonctionnalité (epic Interface)|État|
+|-|-|
+|Inscription et connexion depuis l'interface|Terminé|
+|Ajout d'une parcelle et planification d'un arrosage|Terminé|
+|Liste des parcelles et des arrosages|À faire (après SCRUM-13)|
+|Consommation d'eau réelle|À faire (après SCRUM-12)|
+|Dockerfile, pipeline CI avec Trivy, déploiement Kubernetes|À faire|
 
-```bash
-sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-```
+## Auteur
 
-### 7.4 Vérifier l'installation
+Ferid Saad, Master DevOps \& Cloud, ISET Tozeur.
 
-```bash
-sudo systemctl status docker     # doit afficher "active (running)"
-docker --version
-sudo docker run hello-world
-```
-
-### 7.5 Utiliser Docker sans `sudo` (optionnel)
-
-```bash
-sudo usermod -aG docker $USER
-newgrp docker
-docker run hello-world
-```
-
-### Capture d'écran
-
-![Docker installé et test hello-world](images/docker_test.png)
-
-*La capture montre le résultat de `docker --version` et du conteneur `hello-world`
-(message « Hello from Docker! »).*
-
-## 8. Sécurité
-
-- La clé privée (`id_ed25519`) ne doit jamais être partagée ni publiée.
-- Aucun mot de passe ni phrase secrète n'est inclus dans ce document.
