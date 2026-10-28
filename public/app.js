@@ -64,11 +64,19 @@ function renderParcelles(parcelles) {
   const body = $('parcelles-body');
   body.replaceChildren();
   if (parcelles.length === 0) {
-    body.append(emptyRow(4, 'Aucune parcelle pour le moment.'));
+    body.append(emptyRow(5, 'Aucune parcelle pour le moment.'));
   }
   parcelles.forEach((p) => {
     const tr = document.createElement('tr');
-    tr.append(cell(p.id), cell(p.nom), cell(p.surface_ha), cell(p.culture));
+        const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'small danger';
+    deleteButton.textContent = 'Supprimer';
+    deleteButton.addEventListener('click', () => deleteParcelle(p));
+    const actionCell = document.createElement('td');
+    actionCell.append(deleteButton);
+
+    tr.append(cell(p.id), cell(p.nom), cell(p.surface_ha), cell(p.culture), actionCell);
     body.append(tr);
   });
 
@@ -141,6 +149,17 @@ async function loadArrosages() {
 
 async function refresh() {
   try {
+    await Promise.all([loadParcelles(), loadArrosages()]);
+  } catch (err) {
+    showMessage(err.message, true);
+  }
+}
+async function deleteParcelle(parcelle) {
+  const question = `Supprimer la parcelle « ${parcelle.nom} » et tous ses arrosages ?`;
+  if (!window.confirm(question)) return;
+  try {
+    await api(`${IRRIGATION_URL}/parcelles/${parcelle.id}`, { method: 'DELETE' });
+    showMessage(`Parcelle « ${parcelle.nom} » supprimée.`);
     await Promise.all([loadParcelles(), loadArrosages()]);
   } catch (err) {
     showMessage(err.message, true);

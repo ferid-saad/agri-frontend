@@ -30,3 +30,5 @@ select { display: block; width: 100%; padding: 8px; margin-top: 4px;
 .reel-box input { width: 90px; margin: 0; padding: 4px; }
 button.small { padding: 4px 8px; font-size: .8rem; }
 .empty { color: #5f6f5f; font-style: italic; }
+
+button.danger { background: #b71c1c; }
